@@ -10,6 +10,11 @@ The BTI is done into the running kernel, causing it to speculatively access any 
 2. There is no regard here for KASLR. However, other tools exist (as part of other Meltdown PoCs) that do this.
 3. You need to get a copy of the running kernel image and symbols.
 
+This was tested on the following CPUs:
+
+1. Intel Core i7-6500U
+2. Intel Core i7-5500U
+
 # Porting
 
 This PoC has to be ported to your running kernel.
