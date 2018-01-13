@@ -1,4 +1,4 @@
-# A Meltdown PoC that allows reading un-cached memory
+# A Meltdown + Spectre PoC that allows reading un-cached memory
 
 This PoC combines Meltdown together with a Branch Target Injection (BTI, Spectre variant 2) in order to read any virtual memory address on the system (cached or un-cached).
 
