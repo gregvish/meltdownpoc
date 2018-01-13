@@ -46,7 +46,7 @@ Additionally, find a gadget close by that derefs %rdx
     $ objdump -d vmlinux | grep 'ffffffff8138fcb0:' -A 20000 | grep 'mov[^,]*(%rdx' | head -n1
     ffffffff81392126:       48 8b 02                mov    (%rdx),%rax
 
-These are the addresses needed to port the exploit. In this case, set the value CALL_ADDR_NEXT_INST to 0xffffffff8138fcf3, and GADGET_ADDR to 0xffffffff81392126. These constants are in doit.c
+These are the addresses needed to port the exploit. In this case, set the value CALL_ADDR_NEXT_INST to 0xffffffff8138fcf3 (this is the addr of the instruction *after* the call), and GADGET_ADDR to 0xffffffff81392126. These constants are in doit.c
 
 At last, we'll cheat (due to no KASLR bypass) to retrieve the ASLR base
 
@@ -61,4 +61,18 @@ At last, we'll cheat (due to no KASLR bypass) to retrieve the ASLR base
     0f 1f 44 00 00 55 48 89 e5 41 56 41 55 41 54 53
     49 89 f5 49 89 d6 48 83 ec 18 65 48 8b 04 25 28
 
+# How this works
+Fist of all, this PoC implements the basic version of Meltdown, from the Meltdown whitepaper. However this attack is limited to only reading data from the L1D cache (as explained by Google Project Zero). To overcome this limitation, this PoC uses an additional Spectre BTI attack against the kernel.
+
+The attacked indirect call in the kernel is located in security/security.c:
+
+    int security_file_fcntl(struct file *file, unsigned int cmd, unsigned long arg)
+    {
+    	return security_ops->file_fcntl(file, cmd, arg);
+    }
     
+Here, if security_ops points to un-cached memory, the indirect call will be guessed by the CPU (as explained in the Spectre writeups). It's easy to reach this code via the fcntl() syscall.
+
+The attacker controls the *arg* param in this call via the syscall API. The *arg* param will be passed on the %rdx register (per the x86_64 ABI). If *arg* is set to be a pointer, and the BTI causes the indirect call to speculatively execute a gadget that derefs %rdx, the memory *arg* points to will then become cached.
+
+After that the regular Meltdown attack can read the memory.
