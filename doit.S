@@ -52,7 +52,8 @@ after_exception:
 
 .global btb_call
 btb_call:
-    jmpq *%rdi
+    callq *%rdi
+    ret
 
 .global btb_gadget
 btb_gadget:

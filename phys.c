@@ -36,7 +36,7 @@ int main(void)
     char *test = "Hello. This is a test";
 
     printf("Data: %s\n", test);
-    printf("Virt %p, Phys: %p\n", &test, virt_to_phys(test));
+    printf("Virt %p, Phys: 0x%lx\n", &test, virt_to_phys(test));
 
     return 0;
 }

