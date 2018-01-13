@@ -30,6 +30,16 @@ uint64_t virt_to_phys(void *virtual_address) {
     return page_frame_number * PAGE_SIZE + (uint64_t)virtual_address % PAGE_SIZE;
 }
 
+void flush(const void *addr)
+{
+    asm __volatile__ (
+        "clflush 0(%0)  \n"
+        "mfence         \n"
+        :
+        : "r" (addr)
+        :
+    );
+}
 
 int main(void)
 {
@@ -38,6 +48,8 @@ int main(void)
 
     printf("Virt %p, Phys: 0x%lx\n", &test, virt_to_phys(test));
 
+    // Make sure this is un-cached to demonstrate the PoC
+    flush(test);
     sleep(10000);
 
     return 0;
