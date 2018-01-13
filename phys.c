@@ -33,10 +33,12 @@ uint64_t virt_to_phys(void *virtual_address) {
 
 int main(void)
 {
-    char *test = "Hello. This is a test";
+    uint8_t *test = "\xde\xad\xbe\xef\xba\xbe\xca\xfe\xde\xad\xbe\xef\xba\xbe\xca\xfe"
+                    "\xde\xad\xbe\xef\xba\xbe\xca\xfe\xde\xad\xbe\xef\xba\xbe\xca\xfe";
 
-    printf("Data: %s\n", test);
     printf("Virt %p, Phys: 0x%lx\n", &test, virt_to_phys(test));
+
+    sleep(10000);
 
     return 0;
 }

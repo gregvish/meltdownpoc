@@ -26,10 +26,9 @@
 #define CACHE_ELEMS (256)
 #define CACHE_ELEM_SIZE (4096)
 
-#define MIN_VARIANCE_MULT (3)
+#define MIN_VARIANCE_MULT (2)
 #define BYTE_READ_ATTEMPTS (10000)
-#define BYTE_CONFIDENCE_THRESH (3)
-#define ZERO_CONFIDENCE_THRESH (50)
+#define BYTE_CONFIDENCE_THRESH (2)
 
 #define SPACED_OUT __attribute__ ((aligned (0x100000))) 
 
@@ -157,7 +156,7 @@ bool read_memory_byte(uint8_t *ptr, uint8_t *out_byte)
     }
 
     // The byte could be 0
-    if (byte_scores[0] > ZERO_CONFIDENCE_THRESH) {
+    if (byte_scores[0] > BYTE_CONFIDENCE_THRESH) {
         *out_byte = 0;
         return true;
     }
@@ -177,10 +176,10 @@ void dump_memory(uint8_t *ptr, uint32_t size)
 
         if (read_memory_byte(ptr + i, &byte)) {
             printf("%02x ", byte);
-            fflush(stdout);
         } else {
             printf("?? ");
         }
+        fflush(stdout);
     }
 
     printf("\n");
